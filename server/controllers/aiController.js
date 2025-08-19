@@ -270,3 +270,43 @@ const content =  response.choices[0].message.content;
     res.json({ success: false, message: error.message });
   }
 };
+
+export const generateJoke = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const { prompt, jokeType } = req.body;
+    const plan = req.plan;
+    const free_usage = req.free_usage;
+
+    if(plan !== 'premium' && free_usage >= 10){
+      return res.json({success: false, message: 'Free usage limit reached. Upgrade to premium for more usage.'});
+    }
+
+    const response = await AI.chat.completions.create({
+    model: "gemini-2.0-flash",
+    messages: [{
+         role: "user",
+         content: prompt
+     }]
+    });
+
+    const content = response.choices[0].message.content;
+
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${prompt}, ${content}, 'joke')
+    `;
+
+    if(plan !== 'premium'){
+      await sql`
+        UPDATE users SET free_usage = free_usage + 1 WHERE clerk_user_id = ${userId}
+      `;
+    }
+
+    res.json({success: true, content});
+
+  } catch (error) {
+    console.log(error.message);
+    res.json({ success: false, message: error.message });
+  }
+};
